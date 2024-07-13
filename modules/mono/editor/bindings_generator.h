@@ -201,6 +201,12 @@ class BindingsGenerator {
 		 */
 		bool is_compat = false;
 
+		/**
+		 * Determines if this version of the method is an overload.
+		 * If it is, cache things ignore it.
+		 */
+		bool is_overload = false;
+
 		List<ArgumentInterface> arguments;
 
 		const DocData::MethodDoc *method_doc = nullptr;

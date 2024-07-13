@@ -2240,7 +2240,7 @@ Error BindingsGenerator::_generate_cs_type(const TypeInterface &itype, const Str
 		// Generate method names cache fields
 
 		for (const MethodInterface &imethod : itype.methods) {
-			if (!imethod.is_virtual) {
+			if (!imethod.is_virtual || imethod.is_overload) {
 				continue;
 			}
 
@@ -2283,7 +2283,7 @@ Error BindingsGenerator::_generate_cs_type(const TypeInterface &itype, const Str
 			   << INDENT1 "{\n";
 
 		for (const MethodInterface &imethod : itype.methods) {
-			if (!imethod.is_virtual) {
+			if (!imethod.is_virtual || imethod.is_overload) {
 				continue;
 			}
 
@@ -3923,6 +3923,45 @@ bool BindingsGenerator::_populate_object_type_interfaces() {
 			} else {
 				itype.methods.push_back(imethod);
 			}
+
+			// Generate span overload of method.
+			// Everything is identical, but the function's array arguments are replaced with spans.
+			MethodInterface imethod_copy;
+			imethod_copy = imethod;
+			imethod_copy.is_overload = true;
+			imethod_copy.arguments = {};
+
+			List<ArgumentInterface> arguments_with_default = {};
+
+			bool has_arrays = false;
+			for (ArgumentInterface argument : imethod.arguments) {
+				String argument_type = argument.type.cname;
+
+				if (argument_type.contains("Array") && argument_type.contains("Packed")) {
+					ArgumentInterface arg_copy = argument;
+
+					arg_copy.type.cname = argument_type + "Span";
+					arg_copy.default_argument = "";
+
+					imethod_copy.add_argument(arg_copy);
+					has_arrays = true;
+				} else {
+					if (argument.default_argument != "") {
+						arguments_with_default.push_back(argument);
+					} else {
+						imethod_copy.add_argument(argument);
+					}
+				}
+			}
+
+			if (has_arrays) {
+				for (ArgumentInterface arg : arguments_with_default) {
+					imethod_copy.add_argument(arg);
+				}
+
+				itype.methods.push_back(imethod_copy);
+			}
+
 		}
 
 		// Add compat methods that don't conflict with other methods in the type.
@@ -4565,6 +4604,18 @@ void BindingsGenerator::_populate_builtin_type_interfaces() {
 		itype.name = #m_name;                                                       \
 		itype.cname = itype.name;                                                   \
 		itype.proxy_name = #m_proxy_t "[]";                                         \
+		itype.cs_type = itype.proxy_name;                                           \
+		itype.c_in = "%5using %0 %1_in = " C_METHOD_MONOARRAY_TO(m_type) "(%1);\n"; \
+		itype.c_out = "%5return " C_METHOD_MONOARRAY_FROM(m_type) "(%1);\n";        \
+		itype.c_arg_in = "&%s_in";                                                  \
+		itype.c_type = #m_managed_type;                                             \
+		itype.c_type_in = itype.proxy_name;                                         \
+		itype.c_type_out = itype.proxy_name;                                        \
+		itype.c_type_is_disposable_struct = true;                                   \
+		builtin_types.insert(itype.name, itype);                                    \
+                                                                                    \
+		itype.name = #m_name "Span";                                                \
+		itype.proxy_name = "Span<" #m_proxy_t ">";                                  \
 		itype.cs_type = itype.proxy_name;                                           \
 		itype.c_in = "%5using %0 %1_in = " C_METHOD_MONOARRAY_TO(m_type) "(%1);\n"; \
 		itype.c_out = "%5return " C_METHOD_MONOARRAY_FROM(m_type) "(%1);\n";        \
